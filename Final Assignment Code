@@ -1,0 +1,272 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog, scrolledtext
+import pickle
+import threading
+from datetime import datetime
+import logging
+
+# Setup logging
+logging.basicConfig(filename='event_management.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Helper functions
+def create_button(parent, text, command, side=tk.LEFT, padx=10):
+    btn = tk.Button(parent, text=text, command=command)
+    btn.pack(side=side, padx=padx)
+    return btn
+
+def ask_user_input(title, prompt):
+    return simpledialog.askstring(title, prompt)
+
+def error_handler(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+            logging.error(f"Error: {str(e)}")
+            raise e
+    return wrapper
+
+def validate_details(entity_type, details, action):
+    expected_counts = {
+        'add': {'Employee': 9, 'Client': 5, 'Event': 7, 'Guest': 3, 'Supplier': 5},
+        'modify': {'Employee': 8, 'Client': 4, 'Event': 6, 'Guest': 2, 'Supplier': 4}
+    }
+    details_list = details.split(",")
+    if len(details_list) != expected_counts[action][entity_type]:
+        messagebox.showerror("Error", f"Incorrect number of details provided for {entity_type}. Expected {expected_counts[action][entity_type]} details, got {len(details_list)}.")
+        return False, []
+    return True, details_list
+
+def save_data_async(filename, data):
+    def save():
+        try:
+            with open(filename, 'wb') as file:
+                pickle.dump(data, file)
+            logging.info(f"Data saved to {filename}")
+        except Exception as e:
+            logging.error(f"Failed to save data to {filename}: {e}")
+            messagebox.showerror("Error", f"Failed to save data: {e}")
+    thread = threading.Thread(target=save)
+    thread.start()
+
+def load_data(filename):
+    try:
+        with open(filename, 'rb') as file:
+            return pickle.load(file)
+    except FileNotFoundError:
+        logging.warning(f"{filename} not found, initializing empty data.")
+        return []
+    except Exception as e:
+        logging.error(f"Failed to load data from {filename}: {e}")
+        return []
+
+# Entity classes
+class Entity:
+    def __init__(self):
+        raise NotImplementedError("Subclasses should implement this!")
+
+class Employee(Entity):
+    all_employees = load_data('employees.pkl')
+
+    def __init__(self, name, id_number, department, job_title, salary, manager_id, age, birth_date, passport_details):
+        self.name = name
+        self.id_number = id_number
+        self.department = department
+        self.job_title = job_title
+        self.salary = float(salary)
+        self.manager_id = manager_id
+        self.age = int(age)
+        self.birth_date = datetime.strptime(birth_date.strip(), "%Y-%m-%d").date()
+        self.passport_details = passport_details
+        Employee.all_employees.append(self)
+
+    def update(self, name, department, job_title, salary, manager_id, age, birth_date, passport_details):
+        self.name = name
+        self.department = department
+        self.job_title = job_title
+        self.salary = float(salary)
+        self.manager_id = manager_id
+        self.age = int(age)
+        self.birth_date = datetime.strptime(birth_date.strip(), "%Y-%m-%d").date()
+        self.passport_details = passport_details
+
+    def __str__(self):
+        return f"Name: {self.name}, ID: {self.id_number}, Department: {self.department}, Job: {self.job_title}, Salary: {self.salary}, Manager ID: {self.manager_id}, Age: {self.age}, Birth Date: {self.birth_date}, Passport Details: {self.passport_details}"
+
+class Client(Entity):
+    all_clients = load_data('clients.pkl')
+
+    def __init__(self, client_id, name, address, contact_details, budget):
+        self.client_id = client_id
+        self.name = name
+        self.address = address
+        self.contact_details = contact_details
+        self.budget = float(budget)
+        Client.all_clients.append(self)
+
+    def update(self, name, address, contact_details, budget):
+        self.name = name
+        self.address = address
+        self.contact_details = contact_details
+        self.budget = float(budget)
+
+    def __str__(self):
+        return f"Client ID: {self.client_id}, Name: {self.name}, Address: {self.address}, Contact Details: {self.contact_details}, Budget: {self.budget}"
+
+class Event(Entity):
+    all_events = load_data('events.pkl')
+
+    def __init__(self, event_id, type, theme, date, client_id, guest_list, suppliers):
+        self.event_id = event_id
+        self.type = type
+        self.theme = theme
+        self.date = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+        self.client_id = client_id
+        self.guest_list = guest_list.split(';')
+        self.suppliers = suppliers.split(';')
+        Event.all_events.append(self)
+
+    def update(self, type, theme, date, client_id, guest_list, suppliers):
+        self.type = type
+        self.theme = theme
+        self.date = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+        self.client_id = client_id
+        self.guest_list = guest_list.split(';')
+        self.suppliers = suppliers.split(';')
+
+    def __str__(self):
+        return f"Event ID: {self.event_id}, Type: {self.type}, Theme: {self.theme}, Date: {self.date}, Client ID: {self.client_id}, Guests: {', '.join(self.guest_list)}, Suppliers: {', '.join(self.suppliers)}"
+
+class Guest(Entity):
+    all_guests = load_data('guests.pkl')
+
+    def __init__(self, guest_id, name, address):
+        self.guest_id = guest_id
+        self.name = name
+        self.address = address
+        Guest.all_guests.append(self)
+
+    def update(self, name, address):
+        self.name = name
+        self.address = address
+
+    def __str__(self):
+        return f"Guest ID: {self.guest_id}, Name: {self.name}, Address: {self.address}"
+
+class Supplier(Entity):
+    all_suppliers = load_data('suppliers.pkl')
+
+    def __init__(self, supplier_id, name, address, contact_details, service_type):
+        self.supplier_id = supplier_id
+        self.name = name
+        self.address = address
+        self.contact_details = contact_details
+        self.service_type = service_type
+        Supplier.all_suppliers.append(self)
+
+    def update(self, name, address, contact_details, service_type):
+        self.name = name
+        self.address = address
+        self.contact_details = contact_details
+        self.service_type = service_type
+
+    def __str__(self):
+        return f"Supplier ID: {self.supplier_id}, Name: {self.name}, Address: {self.address}, Contact Details: {self.contact_details}, Service Type: {self.service_type}"
+
+# GUI Application
+def display_entities(entities, entity_type):
+    if not entities:
+        messagebox.showinfo("Display", f"No {entity_type} found.")
+        return
+    display_text = "\n".join(str(entity) for entity in entities)
+    top = tk.Toplevel()
+    top.title(f"Display All {entity_type}")
+    text_area = scrolledtext.ScrolledText(top, wrap=tk.WORD, width=80, height=20)
+    text_area.pack(padx=10, pady=10)
+    text_area.insert(tk.END, display_text)
+    text_area.config(state='disabled')
+
+@error_handler
+def manage_entities(entity_class):
+    entity_type = entity_class.__name__
+    entities = getattr(entity_class, f'all_{entity_type.lower()}s')
+    action = ask_user_input("Action", "Choose an action: Add, Modify, Delete, Display, or Exit").lower()
+
+    # Establishing correct ID attributes for each entity type
+    id_attribute = {
+        'Employee': 'id_number',
+        'Client': 'client_id',
+        'Event': 'event_id',  # Assuming event_id for Events
+        'Guest': 'guest_id',  # Assuming guest_id for Guests
+        'Supplier': 'supplier_id'  # Assuming supplier_id for Suppliers
+    }.get(entity_type, 'id')  # Default 'id' if not specified above
+
+    detail_prompts = {
+        'Employee': {
+            'add': "Enter details (Name, ID Number, Department, Job Title, Salary, Manager ID, Age, Birth Date (YYYY-MM-DD), Passport Details):",
+            'modify': "Enter details (Name, Department, Job Title, Salary, Manager ID, Age, Birth Date (YYYY-MM-DD), Passport Details):"
+        },
+        'Client': {
+            'add': "Enter details (Client ID, Name, Address, Contact Details, Budget):",
+            'modify': "Enter details (Name, Address, Contact Details, Budget):"
+        },
+        'Event': {
+            'add': "Enter details (Event ID, Type, Theme, Date, Client ID, Guest List, Suppliers):",
+            'modify': "Enter details (Type, Theme, Date, Client ID, Guest List, Suppliers):"
+        },
+        'Guest': {
+            'add': "Enter details (Guest ID, Name, Address):",
+            'modify': "Enter details (Name, Address):"
+        },
+        'Supplier': {
+            'add': "Enter details (Supplier ID, Name, Address, Contact Details, Service Type):",
+            'modify': "Enter details (Name, Address, Contact Details, Service Type):"
+        }
+    }
+
+    if action in ['add', 'modify']:
+        details_prompt = detail_prompts[entity_type][action]
+        details = ask_user_input(f"{action.title()} {entity_type}", details_prompt)
+        valid, details_list = validate_details(entity_type, details, action)
+        if valid:
+            if action == 'add':
+                new_entity = entity_class(*details_list)
+                entities.append(new_entity)
+            else:  # modify
+                id_to_modify = ask_user_input(f"Modify {entity_type}", f"Enter {id_attribute} of {entity_type} to modify:")
+                for entity in entities:
+                    if str(getattr(entity, id_attribute)) == id_to_modify:
+                        entity.update(*details_list)
+                        break
+            save_data_async(f'{entity_type.lower()}s.pkl', entities)
+            messagebox.showinfo("Success", f"{entity_type} {action}ed successfully.")
+    elif action == "delete":
+        id_to_delete = ask_user_input("Delete " + entity_type, f"Enter {id_attribute} of {entity_type} to delete:")
+        original_count = len(entities)
+        entities[:] = [entity for entity in entities if str(getattr(entity, id_attribute)) != id_to_delete]
+        if len(entities) < original_count:
+            save_data_async(f'{entity_type.lower()}s.pkl', entities)
+            messagebox.showinfo("Success", f"{entity_type} deleted successfully.")
+    elif action == "display":
+        display_entities(entities, entity_type)
+    elif action == "exit":
+        return
+
+def main():
+    root = tk.Tk()
+    root.title("Event Management System")
+
+    frame = tk.Frame(root)
+    frame.pack(pady=20)
+
+    create_button(frame, "Manage Employees", lambda: manage_entities(Employee))
+    create_button(frame, "Manage Clients", lambda: manage_entities(Client))
+    create_button(frame, "Manage Events", lambda: manage_entities(Event))
+    create_button(frame, "Manage Guests", lambda: manage_entities(Guest))
+    create_button(frame, "Manage Suppliers", lambda: manage_entities(Supplier))
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
